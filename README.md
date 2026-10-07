@@ -56,9 +56,9 @@ Since the main task is ranking candidate peptides for each TCR, I focused on ran
 | LogReg full | 0.56 | 0.45 | 0.70 | 0.37 | **0.94** |
 | **RF full** | **0.62** | **0.50** | **0.77** | **0.49** | 0.93 |
 
-The full Random Forest produced the strongest ranking performance overall, while the full Logistic Regression achieved the highest mean ROC-AUC.
+The full Random Forest produced the strongest mean ranking performance overall, while the full Logistic Regression achieved the highest mean ROC-AUC.
 
-I also compared models using paired Wilcoxon signed-rank tests across the repeated splits, with Holm–Bonferroni correction for multiple comparisons. The full Random Forest significantly outperformed the simpler baselines, although its advantage over the full Logistic Regression was not statistically significant.
+In paired comparisons of MRR across the 30 repeated splits, the full Random Forest significantly outperformed TCRen and the peptide-only and peptide+TCR models after Holm–Bonferroni correction. Its advantage over the full Logistic Regression was not statistically significant.
 
 ## A problem I found in the dataset
 
@@ -74,7 +74,7 @@ This was a useful reminder that a model can achieve good evaluation metrics whil
 
 ## Held-out TCR example
 
-As an additional test, I completely removed the A6/Tax system (PDB **1AO7**) from training and used the sequence-based model to rank its 101 candidate peptides.
+As an additional test, I completely removed the A6/Tax system (PDB **1AO7**) from training and used the sequence-only Random Forest (rf_peptide_tcr) to rank its 101 candidate peptides. This model uses peptide and TCR features but does not require a TCRen structural score.
 
 The true cognate peptide ranked:
 
