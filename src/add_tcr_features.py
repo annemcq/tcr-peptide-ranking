@@ -15,10 +15,10 @@ INPUT_CSV = (
     / "data_tcren_features.csv"
 )
 
-TCR_SEQUENCE_CSV = (
+TCR_SOURCE_CSV = (
     BASE
     / "data"
-    / "tcr_sequences.csv"
+    / "summary_PDB_structures.csv"
 )
 
 OUTPUT_CSV = (
@@ -32,13 +32,11 @@ def main():
     """Merge CDR3 sequences and calculate TCR sequence features."""
 
     df = pd.read_csv(INPUT_CSV)
-    tcr_sequences = pd.read_csv(
-        TCR_SEQUENCE_CSV
-    )
+    tcr_source = pd.read_csv(TCR_SOURCE_CSV)
 
     required_dataset_cols = ["pdb_id"]
     required_tcr_cols = [
-        "pdb_id",
+        "pdb.id",
         "cdr3a",
         "cdr3b",
     ]
@@ -52,7 +50,7 @@ def main():
     missing_tcr_cols = [
         col
         for col in required_tcr_cols
-        if col not in tcr_sequences.columns
+        if col not in tcr_source.columns
     ]
 
     if missing_dataset_cols:
@@ -74,17 +72,22 @@ def main():
         .str.upper()
     )
 
-    tcr_sequences["pdb_id"] = (
-        tcr_sequences["pdb_id"]
+    tcr_source["pdb.id"] = (
+        tcr_source["pdb.id"]
         .astype(str)
         .str.strip()
         .str.upper()
     )
 
     tcr_sequences = (
-        tcr_sequences[
-            required_tcr_cols
+        tcr_source[
+            ["pdb.id", "cdr3a", "cdr3b"]
         ]
+        .rename(
+            columns={
+                "pdb.id": "pdb_id",
+            }
+        )
         .drop_duplicates(
             subset=["pdb_id"]
         )
@@ -127,12 +130,10 @@ def main():
             .str.upper()
         )
 
-        empty_sequences = (
-            df[col] == ""
-        )
+        empty_sequences = df[col] == ""
 
         if empty_sequences.any():
-            missing_pdbs = sorted(
+            affected_pdbs = sorted(
                 df.loc[
                     empty_sequences,
                     "pdb_id",
@@ -143,14 +144,11 @@ def main():
 
             raise ValueError(
                 f"Empty {col} sequences for "
-                f"PDB IDs: {missing_pdbs}"
+                f"PDB IDs: {affected_pdbs}"
             )
 
     tcr_feature_rows = [
-        build_tcr_features(
-            cdr3a,
-            cdr3b,
-        )
+        build_tcr_features(cdr3a, cdr3b)
         for cdr3a, cdr3b in zip(
             df["cdr3a"],
             df["cdr3b"],
