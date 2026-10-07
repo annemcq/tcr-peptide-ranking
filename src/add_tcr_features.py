@@ -8,69 +8,188 @@ from src.sequence_features import build_tcr_features
 
 
 BASE = Path(__file__).resolve().parent.parent
-DATA_CSV = BASE / "processed" / "data_tcren_features.csv"
-SUMMARY_CSV = BASE / "data" / "summary_PDB_structures.csv"
-OUT_CSV = BASE / "processed" / "data_tcren_features_with_tcr.csv"
 
+INPUT_CSV = (
+    BASE
+    / "processed"
+    / "data_tcren_features.csv"
+)
 
-# Load peptide-feature dataset and TCR sequence information
-df = pd.read_csv(DATA_CSV)
-summary = pd.read_csv(SUMMARY_CSV)
+TCR_SEQUENCE_CSV = (
+    BASE
+    / "data"
+    / "tcr_sequences.csv"
+)
 
-df["pdb_id"] = df["pdb_id"].astype(str).str.strip().str.lower()
-summary["pdb.id"] = summary["pdb.id"].astype(str).str.strip().str.lower()
-
-for col in ["cdr3a", "cdr3b"]:
-    summary[col] = summary[col].astype(str).str.strip().str.upper()
-
-
-# Keep one CDR3 alpha/beta pair per TCR
-summary_small = (
-    summary[["pdb.id", "cdr3a", "cdr3b"]]
-    .drop_duplicates("pdb.id")
-    .copy()
+OUTPUT_CSV = (
+    BASE
+    / "processed"
+    / "data_tcren_features_with_tcr.csv"
 )
 
 
-# Generate TCR features using the same function used at inference time
-tcr_features = summary_small.apply(
-    lambda row: build_tcr_features(
-        row["cdr3a"],
-        row["cdr3b"],
-    ),
-    axis=1,
-)
+def main():
+    """Merge CDR3 sequences and calculate TCR sequence features."""
 
-feature_df = pd.DataFrame(tcr_features.tolist(), index=summary_small.index)
+    df = pd.read_csv(INPUT_CSV)
+    tcr_sequences = pd.read_csv(
+        TCR_SEQUENCE_CSV
+    )
 
-summary_small = pd.concat(
-    [summary_small, feature_df],
-    axis=1,
-)
+    required_dataset_cols = ["pdb_id"]
+    required_tcr_cols = [
+        "pdb_id",
+        "cdr3a",
+        "cdr3b",
+    ]
 
-summary_small = summary_small.rename(
-    columns={"pdb.id": "pdb_id"}
-)
+    missing_dataset_cols = [
+        col
+        for col in required_dataset_cols
+        if col not in df.columns
+    ]
+
+    missing_tcr_cols = [
+        col
+        for col in required_tcr_cols
+        if col not in tcr_sequences.columns
+    ]
+
+    if missing_dataset_cols:
+        raise ValueError(
+            "Missing required dataset columns: "
+            f"{missing_dataset_cols}"
+        )
+
+    if missing_tcr_cols:
+        raise ValueError(
+            "Missing required TCR sequence columns: "
+            f"{missing_tcr_cols}"
+        )
+
+    df["pdb_id"] = (
+        df["pdb_id"]
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
+
+    tcr_sequences["pdb_id"] = (
+        tcr_sequences["pdb_id"]
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
+
+    tcr_sequences = (
+        tcr_sequences[
+            required_tcr_cols
+        ]
+        .drop_duplicates(
+            subset=["pdb_id"]
+        )
+        .copy()
+    )
+
+    df = df.merge(
+        tcr_sequences,
+        on="pdb_id",
+        how="left",
+        validate="many_to_one",
+    )
+
+    missing_sequences = (
+        df[["cdr3a", "cdr3b"]]
+        .isna()
+        .any(axis=1)
+    )
+
+    if missing_sequences.any():
+        missing_pdbs = sorted(
+            df.loc[
+                missing_sequences,
+                "pdb_id",
+            ]
+            .unique()
+            .tolist()
+        )
+
+        raise ValueError(
+            "Missing CDR3 sequences for "
+            f"PDB IDs: {missing_pdbs}"
+        )
+
+    for col in ["cdr3a", "cdr3b"]:
+        df[col] = (
+            df[col]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
+
+        empty_sequences = (
+            df[col] == ""
+        )
+
+        if empty_sequences.any():
+            missing_pdbs = sorted(
+                df.loc[
+                    empty_sequences,
+                    "pdb_id",
+                ]
+                .unique()
+                .tolist()
+            )
+
+            raise ValueError(
+                f"Empty {col} sequences for "
+                f"PDB IDs: {missing_pdbs}"
+            )
+
+    tcr_feature_rows = [
+        build_tcr_features(
+            cdr3a,
+            cdr3b,
+        )
+        for cdr3a, cdr3b in zip(
+            df["cdr3a"],
+            df["cdr3b"],
+        )
+    ]
+
+    tcr_features = pd.DataFrame(
+        tcr_feature_rows,
+        index=df.index,
+    )
+
+    df = pd.concat(
+        [
+            df,
+            tcr_features,
+        ],
+        axis=1,
+    )
+
+    OUTPUT_CSV.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    df.to_csv(
+        OUTPUT_CSV,
+        index=False,
+    )
+
+    print(
+        f"Added TCR features to "
+        f"{len(df)} TCR-peptide pairs."
+    )
+
+    print(
+        f"Saved dataset to: "
+        f"{OUTPUT_CSV.resolve()}"
+    )
 
 
-# Merge TCR features with the peptide-feature dataset
-df_out = df.merge(
-    summary_small,
-    on="pdb_id",
-    how="left",
-)
-
-missing_rows = (
-    df_out["cdr3a"].isna().sum()
-    + df_out["cdr3b"].isna().sum()
-)
-
-print("Rows with missing CDR3 info:", missing_rows)
-
-
-# Save final feature dataset
-df_out.to_csv(OUT_CSV, index=False)
-
-print("Input shape:", df.shape)
-print("Output shape:", df_out.shape)
-print("Saved to:", OUT_CSV)
+if __name__ == "__main__":
+    main()
