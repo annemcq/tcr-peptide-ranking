@@ -8,35 +8,99 @@ from src.sequence_features import build_peptide_features
 
 
 BASE = Path(__file__).resolve().parent.parent
-SOURCE_CSV = BASE / "processed" / "data_tcren_score.csv"
-FINAL_CSV = BASE / "processed" / "data_tcren_features.csv"
 
-
-# Load scored TCR-peptide pairs
-df = pd.read_csv(SOURCE_CSV)
-
-required_cols = ["pdb_id", "peptide", "label", "tcren_score"]
-missing = [col for col in required_cols if col not in df.columns]
-
-if missing:
-    raise ValueError(f"Missing columns: {missing}")
-
-df["pdb_id"] = df["pdb_id"].astype(str).str.strip().str.lower()
-df["peptide"] = df["peptide"].astype(str).str.strip().str.upper()
-
-
-# Generate peptide features using the same function used at inference time
-feature_df = pd.DataFrame(
-    df["peptide"].apply(build_peptide_features).tolist()
+INPUT_CSV = (
+    BASE
+    / "processed"
+    / "data_tcren.csv"
 )
 
-df_out = pd.concat(
-    [df.reset_index(drop=True), feature_df],
-    axis=1,
+OUTPUT_CSV = (
+    BASE
+    / "processed"
+    / "data_tcren_features.csv"
 )
 
 
-# Save processed dataset
-df_out.to_csv(FINAL_CSV, index=False)
+def main():
+    """Calculate peptide features for every TCR-peptide pair."""
 
-print(f"Saved to: {FINAL_CSV.resolve()}")
+    df = pd.read_csv(INPUT_CSV)
+
+    required_cols = ["peptide"]
+
+    missing = [
+        col
+        for col in required_cols
+        if col not in df.columns
+    ]
+
+    if missing:
+        raise ValueError(
+            f"Missing required columns: {missing}"
+        )
+
+    missing_peptides = df["peptide"].isna()
+
+    if missing_peptides.any():
+        raise ValueError(
+            f"Found {missing_peptides.sum()} rows "
+            "with missing peptide sequences."
+        )
+
+    df["peptide"] = (
+        df["peptide"]
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
+
+    empty_peptides = df["peptide"] == ""
+
+    if empty_peptides.any():
+        raise ValueError(
+            f"Found {empty_peptides.sum()} rows "
+            "with empty peptide sequences."
+        )
+
+    feature_rows = [
+        build_peptide_features(peptide)
+        for peptide in df["peptide"]
+    ]
+
+    peptide_features = pd.DataFrame(
+        feature_rows,
+        index=df.index,
+    )
+
+    df_out = pd.concat(
+        [
+            df,
+            peptide_features,
+        ],
+        axis=1,
+    )
+
+    OUTPUT_CSV.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    df_out.to_csv(
+        OUTPUT_CSV,
+        index=False,
+    )
+
+    print(
+        f"Added peptide features to "
+        f"{len(df_out)} TCR-peptide pairs."
+    )
+
+    print(
+        f"Saved dataset to: "
+        f"{OUTPUT_CSV.resolve()}"
+    )
+
+
+if __name__ == "__main__":
+    main()
