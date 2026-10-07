@@ -16,6 +16,8 @@ For every pair, I calculated three groups of features:
 - **TCR features:** features derived from the CDR3α and CDR3β sequences
 - **TCRen score:** structure-based statistical potential for the TCR–peptide pair
 
+For TCRen scoring, candidate peptides reuse the contact map of the cognate complex, with peptide residues substituted position by position. This is useful for comparing sequences within the available structures, but it does not model how a different peptide might alter the contact pattern.
+
 ## Models
 
 I compared seven model/feature combinations:
@@ -60,21 +62,39 @@ The full Random Forest produced the strongest mean ranking performance overall, 
 
 In paired comparisons of MRR across the 30 repeated splits, the full Random Forest significantly outperformed TCRen and the peptide-only and peptide+TCR models after Holm–Bonferroni correction. Its advantage over the full Logistic Regression was not statistically significant.
 
-## A problem I found in the dataset
+## Looking at what the model learned
 
-One of the most useful parts of this project came from looking at the feature importance.
+The first feature-importance analysis highlighted cysteine and histidine frequency among the strongest sequence features. That made me look more closely at how I had generated the negative peptides.
 
-Cysteine and histidine frequency appeared among the strongest sequence features. That made me look more closely at how I had generated the negative peptides.
+The negatives were produced by sampling amino acids uniformly, whereas real peptides do not follow a uniform amino-acid distribution. This creates an opportunity for the classifier to distinguish **real peptide sequences from artificially generated sequences**, rather than learning TCR–peptide recognition alone.
 
-The negatives were produced by sampling amino acids uniformly, whereas real peptides do not follow a uniform amino-acid distribution. This means that the classifier can partly learn to distinguish **real peptide sequences from artificially generated sequences**, rather than learning TCR–peptide recognition alone.
+To check whether the initial feature-importance result was just an artifact of Random Forest's impurity-based importance, I repeated the analysis using **permutation importance on held-out TCR systems** across 30 grouped splits.
 
-So although the models perform well on this dataset, I would not interpret the reported performance as evidence that the sequence features alone can predict biological TCR specificity at this level.
+The strongest mean permutation importances were:
 
-This was a useful reminder that a model can achieve good evaluation metrics while exploiting a shortcut introduced during dataset construction.
+| Feature | Mean importance |
+|---|---:|
+| TCRen score | 0.314 |
+| Cysteine fraction (`frac_C`) | 0.140 |
+| Histidine fraction (`frac_H`) | 0.087 |
+| Tryptophan fraction (`frac_W`) | 0.061 |
+| Methionine fraction (`frac_M`) | 0.053 |
+
+Permutation importance was measured as the decrease in Average Precision after shuffling each feature in held-out data.
+
+TCRen was clearly the most important individual feature. However, cysteine and histidine remained the two strongest sequence-composition features even when importance was measured on TCRs that were not used for training.
+
+This makes the negative-sampling issue harder to dismiss as a feature-importance artifact. At least part of the model's sequence signal is likely coming from the difference between natural cognate peptides and uniformly generated negatives.
+
+The simple CDR3 summary features, by contrast, had relatively small permutation importances. I would not interpret this as evidence that TCR sequence is unimportant; it suggests that these particular hand-engineered representations add limited information in this experiment.
+
+For that reason, I would not interpret the reported performance as evidence that these sequence features alone can predict biological TCR specificity at this level. A model can achieve good evaluation metrics while exploiting a shortcut introduced during dataset construction.
 
 ## Held-out TCR example
 
-As an additional test, I completely removed the A6/Tax system (PDB **1AO7**) from training and used the sequence-only Random Forest (rf_peptide_tcr) to rank its 101 candidate peptides. This model uses peptide and TCR features but does not require a TCRen structural score.
+As an additional test, I completely removed the A6/Tax system (PDB **1AO7**) from training.
+
+For this example I used the sequence-only Random Forest (`rf_peptide_tcr`), which uses peptide and TCR features but does not require a TCRen structural score, to rank its 101 candidate peptides.
 
 The true cognate peptide ranked:
 
@@ -82,31 +102,31 @@ The true cognate peptide ranked:
 
 I treat this as an illustrative example rather than evidence of generalisation, since it represents only one held-out TCR system.
 
-## What I would try next
+## Limitations and what I would try next
 
-The first thing I would change is the negative sampling strategy.
+The main limitation I would address is the negative sampling strategy.
 
-Instead of uniformly generated sequences, I would use biologically plausible negatives sampled from real protein sequences, ideally controlling for peptide length and MHC context. This would make it much harder for the model to exploit simple amino-acid composition differences.
+Instead of uniformly generated sequences, I would use biologically plausible negatives sampled from real protein sequences, ideally controlling for peptide length and MHC context. I would then repeat the evaluation and feature-importance analysis to see how much of the current ranking performance remains once the composition shortcut is removed.
 
-I would also like to:
+Other useful extensions would be:
 
 - evaluate on a larger collection of independent TCR systems
-- experiment with richer TCR and peptide representations
-- compare sequence-based representations with structural information
-- investigate whether ranking performance remains after removing the composition shortcut
+- use richer representations of TCR and peptide sequences
 - structurally remodel candidate peptides rather than reusing the cognate contact map for TCRen scoring
+- compare sequence-based representations with structural information under more realistic negative sampling
 
 ## Repository structure
 
 ```text
 tcr-peptide-ranking/
-├── data/
-├── models/
-├── notebooks/
-├── plots/
-├── results/
-├── src/
-└── tests/
+├── data/          # source TCRen data and contact maps
+├── models/        # trained models used for inference examples
+├── notebooks/     # analysis and inference walkthroughs
+├── plots/         # generated figures
+├── processed/     # intermediate datasets
+├── results/       # evaluation, significance and permutation-importance results
+├── src/           # data processing, modelling and analysis code
+└── tests/         # feature, dataset-construction and TCRen scoring tests
 ```
 
 The main analysis code is contained in `src/`, while `notebooks/` contains walkthroughs of the results and inference examples.
@@ -133,6 +153,13 @@ Run the repeated evaluation and statistical comparison:
 ```bash
 python src/run_evaluation.py
 python src/paired_significance_test.py
+```
+
+Run the feature-importance analyses:
+
+```bash
+python src/feature_importance.py
+python src/permutation_importance.py
 ```
 
 Run the tests:
