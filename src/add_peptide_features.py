@@ -1,18 +1,25 @@
 """Add peptide sequence features to the TCR-peptide dataset."""
 
 from pathlib import Path
+import sys
 
 import pandas as pd
-
-from src.sequence_features import build_peptide_features
 
 
 BASE = Path(__file__).resolve().parent.parent
 
+# Allow this script to be run directly from the repository root:
+# python src/add_peptide_features.py
+if str(BASE) not in sys.path:
+    sys.path.insert(0, str(BASE))
+
+from src.sequence_features import build_peptide_features
+
+
 INPUT_CSV = (
     BASE
     / "processed"
-    / "data_tcren.csv"
+    / "data_tcren_score.csv"
 )
 
 OUTPUT_CSV = (
@@ -27,17 +34,9 @@ def main():
 
     df = pd.read_csv(INPUT_CSV)
 
-    required_cols = ["peptide"]
-
-    missing = [
-        col
-        for col in required_cols
-        if col not in df.columns
-    ]
-
-    if missing:
+    if "peptide" not in df.columns:
         raise ValueError(
-            f"Missing required columns: {missing}"
+            "Missing required column: peptide"
         )
 
     missing_peptides = df["peptide"].isna()
