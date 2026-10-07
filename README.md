@@ -53,10 +53,10 @@ Since the main task is ranking candidate peptides for each TCR, I focused on ran
 | TCRen baseline | 0.33 | 0.15 | 0.49 | 0.22 | 0.91 |
 | LogReg peptide | 0.30 | 0.16 | 0.47 | 0.17 | 0.88 |
 | LogReg peptide + TCR | 0.30 | 0.16 | 0.46 | 0.15 | 0.87 |
-| RF peptide + TCR | 0.48 | 0.35 | 0.63 | 0.35 | 0.88 |
-| RF peptide | 0.51 | 0.38 | 0.67 | 0.35 | 0.89 |
+| RF peptide + TCR | 0.49 | 0.37 | 0.65 | 0.35 | 0.87 |
+| RF peptide | 0.51 | 0.39 | 0.67 | 0.36 | 0.89 |
 | LogReg full | 0.56 | 0.45 | 0.70 | 0.37 | **0.94** |
-| **RF full** | **0.62** | **0.50** | **0.77** | **0.49** | 0.93 |
+| **RF full** | **0.62** | **0.50** | **0.75** | **0.49** | 0.93 |
 
 The full Random Forest produced the strongest mean ranking performance overall, while the full Logistic Regression achieved the highest mean ROC-AUC.
 
@@ -74,11 +74,11 @@ The strongest mean permutation importances were:
 
 | Feature | Mean importance |
 |---|---:|
-| TCRen score | 0.330 |
-| Cysteine fraction (`frac_C`) | 0.136 |
-| Histidine fraction (`frac_H`) | 0.092 |
-| Tryptophan fraction (`frac_W`) | 0.073 |
-| Methionine fraction (`frac_M`) | 0.063 |
+| TCRen score | 0.333 |
+| Cysteine fraction (`frac_C`) | 0.145 |
+| Histidine fraction (`frac_H`) | 0.089 |
+| Tryptophan fraction (`frac_W`) | 0.066 |
+| Methionine fraction (`frac_M`) | 0.055 |
 
 Permutation importance was measured as the decrease in Average Precision after shuffling each feature in held-out data.
 
@@ -165,7 +165,7 @@ python src/permutation_importance.py
 Run the tests:
 
 ```bash
-pytest tests/
+python -m pytest
 ```
 
 ## Reference
