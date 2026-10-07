@@ -1,79 +1,76 @@
-# TCR FEATURE AUGMENTATION
+"""Add CDR3 sequence features to the TCR-peptide dataset."""
 
-# Import necessary libraries
-import pandas as pd
 from pathlib import Path
 
-# Required settings
-BASE = Path(__file__).resolve().parent.parent
-data_csv = BASE / "processed" / "data_tcren_features.csv"
-summary_csv = BASE / "data" / "summary_PDB_structures.csv"
-out_csv = BASE / "processed" / "data_tcren_features_with_tcr.csv"
+import pandas as pd
 
-df = pd.read_csv(data_csv)
-summary = pd.read_csv(summary_csv)
+from src.sequence_features import build_tcr_features
+
+
+BASE = Path(__file__).resolve().parent.parent
+DATA_CSV = BASE / "processed" / "data_tcren_features.csv"
+SUMMARY_CSV = BASE / "data" / "summary_PDB_structures.csv"
+OUT_CSV = BASE / "processed" / "data_tcren_features_with_tcr.csv"
+
+
+# Load peptide-feature dataset and TCR sequence information
+df = pd.read_csv(DATA_CSV)
+summary = pd.read_csv(SUMMARY_CSV)
 
 df["pdb_id"] = df["pdb_id"].astype(str).str.strip().str.lower()
 summary["pdb.id"] = summary["pdb.id"].astype(str).str.strip().str.lower()
 
-###############################################################
-# TCR features
-
 for col in ["cdr3a", "cdr3b"]:
     summary[col] = summary[col].astype(str).str.strip().str.upper()
 
-hydrophobic = set("AVILMFWY")
-positive = set("KRH")
-negative = set("DE")
-aromatic = set("FWYH")
 
-###############################################################
-# Define helper functions
-def frac_in_set(seq, aa_set):
-    if not seq:
-        return 0.0
-    return sum(aa in aa_set for aa in seq) / len(seq)
+# Keep one CDR3 alpha/beta pair per TCR
+summary_small = (
+    summary[["pdb.id", "cdr3a", "cdr3b"]]
+    .drop_duplicates("pdb.id")
+    .copy()
+)
 
-def aa_frac(seq, aa):
-    if not seq:
-        return 0.0
-    return seq.count(aa) / len(seq)
 
-###############################################################
-# Additional TCR features in data 
+# Generate TCR features using the same function used at inference time
+tcr_features = summary_small.apply(
+    lambda row: build_tcr_features(
+        row["cdr3a"],
+        row["cdr3b"],
+    ),
+    axis=1,
+)
 
-summary_small = summary[["pdb.id", "cdr3a", "cdr3b"]].drop_duplicates("pdb.id").copy()
+feature_df = pd.DataFrame(tcr_features.tolist(), index=summary_small.index)
 
-# Compute length features
-summary_small["cdr3a_len"] = summary_small["cdr3a"].str.len()
-summary_small["cdr3b_len"] = summary_small["cdr3b"].str.len()
-# Composition features
-summary_small["cdr3a_hydrophobic_frac"] = summary_small["cdr3a"].apply(lambda x: frac_in_set(x, hydrophobic))
-summary_small["cdr3a_positive_frac"] = summary_small["cdr3a"].apply(lambda x: frac_in_set(x, positive))
-summary_small["cdr3a_negative_frac"] = summary_small["cdr3a"].apply(lambda x: frac_in_set(x, negative))
-summary_small["cdr3a_aromatic_frac"] = summary_small["cdr3a"].apply(lambda x: frac_in_set(x, aromatic))
-summary_small["cdr3a_glycine_frac"] = summary_small["cdr3a"].apply(lambda x: aa_frac(x, "G"))
-summary_small["cdr3a_proline_frac"] = summary_small["cdr3a"].apply(lambda x: aa_frac(x, "P"))
-# Repeat for beta chain
-summary_small["cdr3b_hydrophobic_frac"] = summary_small["cdr3b"].apply(lambda x: frac_in_set(x, hydrophobic))
-summary_small["cdr3b_positive_frac"] = summary_small["cdr3b"].apply(lambda x: frac_in_set(x, positive))
-summary_small["cdr3b_negative_frac"] = summary_small["cdr3b"].apply(lambda x: frac_in_set(x, negative))
-summary_small["cdr3b_aromatic_frac"] = summary_small["cdr3b"].apply(lambda x: frac_in_set(x, aromatic))
-summary_small["cdr3b_glycine_frac"] = summary_small["cdr3b"].apply(lambda x: aa_frac(x, "G"))
-summary_small["cdr3b_proline_frac"] = summary_small["cdr3b"].apply(lambda x: aa_frac(x, "P"))
+summary_small = pd.concat(
+    [summary_small, feature_df],
+    axis=1,
+)
 
-summary_small = summary_small.rename(columns={"pdb.id": "pdb_id"})
+summary_small = summary_small.rename(
+    columns={"pdb.id": "pdb_id"}
+)
 
-# Merge with original dataset
-df_out = df.merge(summary_small, on="pdb_id", how="left")
 
-missing_rows = df_out["cdr3a"].isna().sum() + df_out["cdr3b"].isna().sum()
+# Merge TCR features with the peptide-feature dataset
+df_out = df.merge(
+    summary_small,
+    on="pdb_id",
+    how="left",
+)
+
+missing_rows = (
+    df_out["cdr3a"].isna().sum()
+    + df_out["cdr3b"].isna().sum()
+)
+
 print("Rows with missing CDR3 info:", missing_rows)
 
-###############################################################
-# Save
-df_out.to_csv(out_csv, index=False)
+
+# Save final feature dataset
+df_out.to_csv(OUT_CSV, index=False)
 
 print("Input shape:", df.shape)
 print("Output shape:", df_out.shape)
-print("Saved to:", out_csv)
+print("Saved to:", OUT_CSV)
