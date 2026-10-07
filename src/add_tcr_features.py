@@ -1,24 +1,25 @@
-"""Add CDR3 sequence features to the TCR-peptide dataset."""
+"""Add TCR sequence features to the TCR-peptide dataset."""
 
 from pathlib import Path
+import sys
 
 import pandas as pd
 
-from src.sequence_features import build_tcr_features
-
 
 BASE = Path(__file__).resolve().parent.parent
+
+# Allow this script to be run directly from the repository root:
+# python src/add_tcr_features.py
+if str(BASE) not in sys.path:
+    sys.path.insert(0, str(BASE))
+
+from src.sequence_features import build_tcr_features
+
 
 INPUT_CSV = (
     BASE
     / "processed"
     / "data_tcren_features.csv"
-)
-
-TCR_SOURCE_CSV = (
-    BASE
-    / "data"
-    / "summary_PDB_structures.csv"
 )
 
 OUTPUT_CSV = (
@@ -29,125 +30,59 @@ OUTPUT_CSV = (
 
 
 def main():
-    """Merge CDR3 sequences and calculate TCR sequence features."""
+    """Add CDR3 alpha/beta sequence features to every TCR-peptide pair."""
 
     df = pd.read_csv(INPUT_CSV)
-    tcr_source = pd.read_csv(TCR_SOURCE_CSV)
 
-    required_dataset_cols = ["pdb_id"]
-    required_tcr_cols = [
-        "pdb.id",
-        "cdr3a",
-        "cdr3b",
+    required_columns = ["cdr3a", "cdr3b"]
+    missing_columns = [
+        column
+        for column in required_columns
+        if column not in df.columns
     ]
 
-    missing_dataset_cols = [
-        col
-        for col in required_dataset_cols
-        if col not in df.columns
-    ]
-
-    missing_tcr_cols = [
-        col
-        for col in required_tcr_cols
-        if col not in tcr_source.columns
-    ]
-
-    if missing_dataset_cols:
+    if missing_columns:
         raise ValueError(
-            "Missing required dataset columns: "
-            f"{missing_dataset_cols}"
+            f"Missing required columns: {missing_columns}"
         )
-
-    if missing_tcr_cols:
-        raise ValueError(
-            "Missing required TCR sequence columns: "
-            f"{missing_tcr_cols}"
-        )
-
-    df["pdb_id"] = (
-        df["pdb_id"]
-        .astype(str)
-        .str.strip()
-        .str.upper()
-    )
-
-    tcr_source["pdb.id"] = (
-        tcr_source["pdb.id"]
-        .astype(str)
-        .str.strip()
-        .str.upper()
-    )
-
-    tcr_sequences = (
-        tcr_source[
-            ["pdb.id", "cdr3a", "cdr3b"]
-        ]
-        .rename(
-            columns={
-                "pdb.id": "pdb_id",
-            }
-        )
-        .drop_duplicates(
-            subset=["pdb_id"]
-        )
-        .copy()
-    )
-
-    df = df.merge(
-        tcr_sequences,
-        on="pdb_id",
-        how="left",
-        validate="many_to_one",
-    )
 
     missing_sequences = (
-        df[["cdr3a", "cdr3b"]]
-        .isna()
-        .any(axis=1)
+        df["cdr3a"].isna()
+        | df["cdr3b"].isna()
     )
 
     if missing_sequences.any():
-        missing_pdbs = sorted(
-            df.loc[
-                missing_sequences,
-                "pdb_id",
-            ]
-            .unique()
-            .tolist()
-        )
-
         raise ValueError(
-            "Missing CDR3 sequences for "
-            f"PDB IDs: {missing_pdbs}"
+            f"Found {missing_sequences.sum()} rows "
+            "with missing CDR3 sequences."
         )
 
-    for col in ["cdr3a", "cdr3b"]:
-        df[col] = (
-            df[col]
-            .astype(str)
-            .str.strip()
-            .str.upper()
+    df["cdr3a"] = (
+        df["cdr3a"]
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
+
+    df["cdr3b"] = (
+        df["cdr3b"]
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
+
+    empty_sequences = (
+        (df["cdr3a"] == "")
+        | (df["cdr3b"] == "")
+    )
+
+    if empty_sequences.any():
+        raise ValueError(
+            f"Found {empty_sequences.sum()} rows "
+            "with empty CDR3 sequences."
         )
 
-        empty_sequences = df[col] == ""
-
-        if empty_sequences.any():
-            affected_pdbs = sorted(
-                df.loc[
-                    empty_sequences,
-                    "pdb_id",
-                ]
-                .unique()
-                .tolist()
-            )
-
-            raise ValueError(
-                f"Empty {col} sequences for "
-                f"PDB IDs: {affected_pdbs}"
-            )
-
-    tcr_feature_rows = [
+    feature_rows = [
         build_tcr_features(cdr3a, cdr3b)
         for cdr3a, cdr3b in zip(
             df["cdr3a"],
@@ -156,11 +91,24 @@ def main():
     ]
 
     tcr_features = pd.DataFrame(
-        tcr_feature_rows,
+        feature_rows,
         index=df.index,
     )
 
-    df = pd.concat(
+    # Avoid duplicate columns if the script is rerun on an
+    # already processed dataset.
+    duplicate_columns = [
+        column
+        for column in tcr_features.columns
+        if column in df.columns
+    ]
+
+    if duplicate_columns:
+        df = df.drop(
+            columns=duplicate_columns
+        )
+
+    df_out = pd.concat(
         [
             df,
             tcr_features,
@@ -173,14 +121,14 @@ def main():
         exist_ok=True,
     )
 
-    df.to_csv(
+    df_out.to_csv(
         OUTPUT_CSV,
         index=False,
     )
 
     print(
         f"Added TCR features to "
-        f"{len(df)} TCR-peptide pairs."
+        f"{len(df_out)} TCR-peptide pairs."
     )
 
     print(
