@@ -1,77 +1,33 @@
-# ADD TCREN SCORING TO DATASET
+"""Compute TCRen scores for all TCR-peptide pairs in the dataset."""
 
-# Import necessary libraries
-import pandas as pd
 from pathlib import Path
 
-# Baseline settings for code
+import pandas as pd
+
+
 BASE = Path(__file__).resolve().parent.parent
-Dataset_csv = BASE / "processed" / "first_dataset_pairs.csv"
-Contact_map_csv = BASE / "data" / "contact_maps_PDB.csv"
-TCRen_potential = BASE / "data" / "TCRen_potential.csv"
-Output = BASE / "processed" / "data_tcren_score.csv"
-
-# Load necessary files
-dataset = pd.read_csv(Dataset_csv)
-contact_maps = pd.read_csv(Contact_map_csv)
-tcren_potential = pd.read_csv(TCRen_potential)
-
-#print("Loaded dataset:", dataset.shape)
-#print("Loaded contact maps:", contact_maps.shape)
-#print("Loaded TCRen potential:", tcren_pot.shape)
-#print()
-
-###############################################################
-
-# Sanitize source data
-
-dataset["pdb_id"] = dataset["pdb_id"].str.strip().str.lower()
-dataset["peptide"] = dataset["peptide"].str.strip().str.upper()
-
-for col in ["pdb.id", "residue.aa.from", "residue.aa.to"]:
-    contact_maps[col] = contact_maps[col].str.strip()
-
-contact_maps["pdb.id"] = contact_maps["pdb.id"].str.lower()
-contact_maps["residue.aa.from"] = contact_maps["residue.aa.from"].str.upper()
-contact_maps["residue.aa.to"] = contact_maps["residue.aa.to"].str.upper()
-
-for col in ["residue.aa.from", "residue.aa.to"]:
-    tcren_potential[col] = tcren_potential[col].str.strip().str.upper()
+DATASET_CSV = BASE / "processed" / "first_dataset_pairs.csv"
+CONTACT_MAP_CSV = BASE / "data" / "contact_maps_PDB.csv"
+TCREN_POTENTIAL_CSV = BASE / "data" / "TCRen_potential.csv"
+OUTPUT_CSV = BASE / "processed" / "data_tcren_score.csv"
 
 
-# TCRen lookup: (TCR residue, peptide residue) -> potential score
-tcren_lookup = dict(
-    zip(
-        zip(
-            tcren_potential["residue.aa.from"],
-            tcren_potential["residue.aa.to"],
-        ),
-        tcren_potential["TCRen"],
-    )
-)
+def compute_tcren_score(
+    pdb_id: str,
+    peptide: str,
+    contact_df: pd.DataFrame,
+    lookup: dict,
+) -> float:
+    """Compute the TCRen score for one TCR-peptide pair."""
 
-print(f"TCRen lookup entries: {len(tcren_lookup)}\n")
-
-###############################################################
-# Optional filter to preserve only TCR-to-peptide contacts
-
-contact_maps = contact_maps[
-    contact_maps["chain.type.to"].astype(str).str.upper() == "PEPTIDE"
-].copy()
-
-#print("Filtered contact maps shape:", contact_maps.shape)
-#print()
-
-
-###############################################################
-# TCRen score function
-
-def compute_tcren_score(pdb_id: str, peptide: str, contact_df: pd.DataFrame, lookup: dict) -> float:
-    # Compute the TCRen score for each PDB-peptide pair
-    contacts = contact_df[contact_df["pdb.id"] == pdb_id]
+    contacts = contact_df[
+        contact_df["pdb.id"] == pdb_id
+    ]
 
     if contacts.empty:
-        raise ValueError(f"No contact map found for pdb_id '{pdb_id}'")
+        raise ValueError(
+            f"No contact map found for pdb_id '{pdb_id}'"
+        )
 
     peptide = peptide.strip().upper()
     score = 0.0
@@ -82,47 +38,138 @@ def compute_tcren_score(pdb_id: str, peptide: str, contact_df: pd.DataFrame, loo
 
         if not 0 <= pos < len(peptide):
             raise ValueError(
-                f"Peptide index {pos} out of range for pdb_id '{pdb_id}' "
-                f"(peptide='{peptide}', length={len(peptide)})"
+                f"Peptide index {pos} out of range for pdb_id "
+                f"'{pdb_id}' (peptide='{peptide}', "
+                f"length={len(peptide)})"
             )
 
         pep_aa = peptide[pos]
 
         try:
             score += lookup[(tcr_aa, pep_aa)]
-        except KeyError:
-            raise ValueError(f"Missing TCRen value for pair ({tcr_aa}, {pep_aa})")
+        except KeyError as exc:
+            raise ValueError(
+                f"Missing TCRen value for pair "
+                f"({tcr_aa}, {pep_aa})"
+            ) from exc
 
     return score
 
-# Score all candidate peptides
 
-scores = []
+def main():
+    """Load the input data, compute TCRen scores, and save the result."""
 
-for idx, row in dataset.iterrows():
-    try:
-        scores.append(
-            compute_tcren_score(
+    dataset = pd.read_csv(DATASET_CSV)
+    contact_maps = pd.read_csv(CONTACT_MAP_CSV)
+    tcren_potential = pd.read_csv(TCREN_POTENTIAL_CSV)
+
+    # Standardize identifiers and amino-acid labels.
+    dataset["pdb_id"] = (
+        dataset["pdb_id"]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
+
+    dataset["peptide"] = (
+        dataset["peptide"]
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
+
+    for col in [
+        "pdb.id",
+        "residue.aa.from",
+        "residue.aa.to",
+    ]:
+        contact_maps[col] = (
+            contact_maps[col]
+            .astype(str)
+            .str.strip()
+        )
+
+    contact_maps["pdb.id"] = (
+        contact_maps["pdb.id"]
+        .str.lower()
+    )
+
+    contact_maps["residue.aa.from"] = (
+        contact_maps["residue.aa.from"]
+        .str.upper()
+    )
+
+    contact_maps["residue.aa.to"] = (
+        contact_maps["residue.aa.to"]
+        .str.upper()
+    )
+
+    for col in [
+        "residue.aa.from",
+        "residue.aa.to",
+    ]:
+        tcren_potential[col] = (
+            tcren_potential[col]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
+
+    # Map each (TCR residue, peptide residue) pair to its TCRen potential.
+    tcren_lookup = dict(
+        zip(
+            zip(
+                tcren_potential["residue.aa.from"],
+                tcren_potential["residue.aa.to"],
+            ),
+            tcren_potential["TCRen"],
+        )
+    )
+
+    print(
+        f"TCRen lookup entries: {len(tcren_lookup)}"
+    )
+
+    # Keep only contacts in which the target residue belongs to the peptide.
+    contact_maps = contact_maps[
+        contact_maps["chain.type.to"]
+        .astype(str)
+        .str.upper()
+        == "PEPTIDE"
+    ].copy()
+
+    # Score every candidate peptide.
+    scores = []
+
+    for idx, row in dataset.iterrows():
+        try:
+            score = compute_tcren_score(
                 pdb_id=row["pdb_id"],
                 peptide=row["peptide"],
                 contact_df=contact_maps,
                 lookup=tcren_lookup,
             )
-        )
-    except Exception as err:
-        raise RuntimeError(
-            f"Scoring failed at row {idx} "
-            f"(pdb_id={row['pdb_id']}, peptide={row['peptide']})"
-        ) from err
+            scores.append(score)
 
-dataset["tcren_score"] = scores
+        except Exception as err:
+            raise RuntimeError(
+                f"Scoring failed at row {idx} "
+                f"(pdb_id={row['pdb_id']}, "
+                f"peptide={row['peptide']})"
+            ) from err
 
-#print("Scoring complete.")
-#print(dataset.head(), "\n")
+    dataset["tcren_score"] = scores
+
+    dataset.to_csv(
+        OUTPUT_CSV,
+        index=False,
+    )
+
+    print(
+        f"Saved scored dataset to: "
+        f"{OUTPUT_CSV.resolve()}"
+    )
 
 
-###############################################################
-
-#Save
-dataset.to_csv(Output, index=False)
-print(f"Saved scored dataset to: {Output.resolve()}")
+if __name__ == "__main__":
+    main()
