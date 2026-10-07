@@ -94,6 +94,7 @@ I would also like to:
 - experiment with richer TCR and peptide representations
 - compare sequence-based representations with structural information
 - investigate whether ranking performance remains after removing the composition shortcut
+- structurally remodel candidate peptides rather than reusing the cognate contact map for TCRen scoring
 
 ## Repository structure
 
