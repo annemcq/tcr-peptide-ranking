@@ -68,17 +68,17 @@ The first feature-importance analysis highlighted cysteine and histidine frequen
 
 The negatives were produced by sampling amino acids uniformly, whereas real peptides do not follow a uniform amino-acid distribution. This creates an opportunity for the classifier to distinguish **real peptide sequences from artificially generated sequences**, rather than learning TCR–peptide recognition alone.
 
-To check whether the initial feature-importance result was just an artifact of Random Forest's impurity-based importance, I repeated the analysis using **permutation importance on held-out TCR systems** across 30 grouped splits.
+To check whether the initial feature-importance result was just an artifact of Random Forest's impurity-based importance, I repeated the analysis using **permutation importance on held-out TCR systems** across the same 30 grouped splits used in the main evaluation.
 
 The strongest mean permutation importances were:
 
 | Feature | Mean importance |
 |---|---:|
-| TCRen score | 0.314 |
-| Cysteine fraction (`frac_C`) | 0.140 |
-| Histidine fraction (`frac_H`) | 0.087 |
-| Tryptophan fraction (`frac_W`) | 0.061 |
-| Methionine fraction (`frac_M`) | 0.053 |
+| TCRen score | 0.330 |
+| Cysteine fraction (`frac_C`) | 0.136 |
+| Histidine fraction (`frac_H`) | 0.092 |
+| Tryptophan fraction (`frac_W`) | 0.073 |
+| Methionine fraction (`frac_M`) | 0.063 |
 
 Permutation importance was measured as the decrease in Average Precision after shuffling each feature in held-out data.
 
