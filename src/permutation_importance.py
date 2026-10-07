@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from sklearn.ensemble import RandomForestClassifier
@@ -22,23 +21,73 @@ TEST_SIZE = 0.30
 RANDOM_SEED = 42
 
 
+PEPTIDE_FEATURES = [
+    "length",
+    "hydrophobic_frac",
+    "polar_frac",
+    "positive_frac",
+    "negative_frac",
+    "aromatic_frac",
+    "small_frac",
+    "tiny_frac",
+    "proline_frac",
+    "glycine_frac",
+    "mw_est",
+    "frac_A",
+    "frac_C",
+    "frac_D",
+    "frac_E",
+    "frac_F",
+    "frac_G",
+    "frac_H",
+    "frac_I",
+    "frac_K",
+    "frac_L",
+    "frac_M",
+    "frac_N",
+    "frac_P",
+    "frac_Q",
+    "frac_R",
+    "frac_S",
+    "frac_T",
+    "frac_V",
+    "frac_W",
+    "frac_Y",
+]
+
+
+TCR_FEATURES = [
+    "cdr3a_len",
+    "cdr3b_len",
+    "cdr3a_hydrophobic_frac",
+    "cdr3a_positive_frac",
+    "cdr3a_negative_frac",
+    "cdr3a_aromatic_frac",
+    "cdr3a_glycine_frac",
+    "cdr3a_proline_frac",
+    "cdr3b_hydrophobic_frac",
+    "cdr3b_positive_frac",
+    "cdr3b_negative_frac",
+    "cdr3b_aromatic_frac",
+    "cdr3b_glycine_frac",
+    "cdr3b_proline_frac",
+]
+
+
+FEATURE_COLS = (
+    PEPTIDE_FEATURES
+    + TCR_FEATURES
+    + ["tcren_score"]
+)
+
+
 def main():
     """Compute permutation importance across repeated grouped splits."""
 
     df = pd.read_csv(DATA_CSV)
 
-    feature_cols = [
-        col
-        for col in df.columns
-        if col.startswith("pep_")
-        or col.startswith("tcr_")
-        or col == "tcren_score"
-    ]
+    required_cols = FEATURE_COLS + ["label", "pdb_id"]
 
-    if not feature_cols:
-        raise ValueError("No model features were found.")
-
-    required_cols = ["label", "pdb_id"]
     missing = [
         col
         for col in required_cols
@@ -50,11 +99,12 @@ def main():
             f"Missing required columns: {missing}"
         )
 
-    X = df[feature_cols]
+    X = df[FEATURE_COLS]
     y = df["label"]
     groups = df["pdb_id"]
 
     all_importances = []
+    split_performance = []
 
     for split_seed in range(N_SPLITS):
         splitter = GroupShuffleSplit(
@@ -73,12 +123,8 @@ def main():
         y_train = y.iloc[train_idx]
         y_test = y.iloc[test_idx]
 
-        train_groups = set(
-            groups.iloc[train_idx]
-        )
-        test_groups = set(
-            groups.iloc[test_idx]
-        )
+        train_groups = set(groups.iloc[train_idx])
+        test_groups = set(groups.iloc[test_idx])
 
         if train_groups & test_groups:
             raise RuntimeError(
@@ -94,6 +140,20 @@ def main():
 
         model.fit(X_train, y_train)
 
+        predictions = model.predict_proba(X_test)[:, 1]
+
+        ap = average_precision_score(
+            y_test,
+            predictions,
+        )
+
+        split_performance.append(
+            {
+                "split": split_seed,
+                "average_precision": ap,
+            }
+        )
+
         result = permutation_importance(
             model,
             X_test,
@@ -105,7 +165,7 @@ def main():
         )
 
         for feature, importance in zip(
-            feature_cols,
+            FEATURE_COLS,
             result.importances_mean,
         ):
             all_importances.append(
@@ -115,13 +175,6 @@ def main():
                     "importance": importance,
                 }
             )
-
-        predictions = model.predict_proba(X_test)[:, 1]
-
-        ap = average_precision_score(
-            y_test,
-            predictions,
-        )
 
         print(
             f"Split {split_seed + 1:02d}/{N_SPLITS} "
@@ -143,6 +196,10 @@ def main():
         )
     )
 
+    performance_df = pd.DataFrame(
+        split_performance
+    )
+
     RESULTS_DIR.mkdir(
         parents=True,
         exist_ok=True,
@@ -153,12 +210,41 @@ def main():
         index=False,
     )
 
+    performance_output = (
+        RESULTS_DIR
+        / "permutation_importance_performance.csv"
+    )
+
+    performance_df.to_csv(
+        performance_output,
+        index=False,
+    )
+
+    print("\nHeld-out performance:")
+    print(
+        f"Mean AP: "
+        f"{performance_df['average_precision'].mean():.3f}"
+    )
+    print(
+        f"SD AP:   "
+        f"{performance_df['average_precision'].std():.3f}"
+    )
+
     print("\nPermutation importance:")
-    print(summary.to_string(index=False))
+    print(
+        summary.to_string(
+            index=False
+        )
+    )
 
     print(
-        f"\nSaved results to: "
+        f"\nSaved feature importance to: "
         f"{OUTPUT_CSV.resolve()}"
+    )
+
+    print(
+        f"Saved split performance to: "
+        f"{performance_output.resolve()}"
     )
 
 
