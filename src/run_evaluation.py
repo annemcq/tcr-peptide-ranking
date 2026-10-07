@@ -1,237 +1,314 @@
-# MODEL 1 EVALUATION
+"""Evaluate TCR-peptide ranking models across repeated grouped splits."""
 
-import pandas as pd
-import numpy as np
 from pathlib import Path
+import sys
 
+import numpy as np
+import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (
+    accuracy_score,
+    average_precision_score,
+    roc_auc_score,
+)
 from sklearn.model_selection import GroupShuffleSplit
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import roc_auc_score, average_precision_score, accuracy_score
 
 
 BASE = Path(__file__).resolve().parent.parent
-Source_CSV = BASE / "processed" / "data_tcren_features_with_tcr.csv"
-Results_CSV = BASE / "results" / "repeated_eval_all_results_with_tcr.csv"
-Summary_CSV = BASE / "results" / "repeated_eval_summary_with_tcr.csv"
 
-# Required settings
-n_repeats = 30
-Size = 0.30
-R_S = 42
+# Allow direct execution from the repository root:
+# python src/run_evaluation.py
+if str(BASE) not in sys.path:
+    sys.path.insert(0, str(BASE))
 
-###############################################################
-# Load data
+from src.sequence_features import PEP_COLS, TCR_COLS
 
-df = pd.read_csv(Source_CSV)
 
-needed = ["pdb_id", "peptide", "label", "tcren_score", "cdr3a", "cdr3b"]
-missing = [c for c in needed if c not in df.columns]
-if missing:
-    raise ValueError(f"Missing columns: {missing}")
+DATA_CSV = BASE / "processed" / "data_tcren_features_with_tcr.csv"
+RESULTS_CSV = BASE / "results" / "repeated_eval_all_results_with_tcr.csv"
+SUMMARY_CSV = BASE / "results" / "repeated_eval_summary_with_tcr.csv"
 
-df["pdb_id"] = df["pdb_id"].astype(str).str.strip().str.lower()
-df["peptide"] = df["peptide"].astype(str).str.strip().str.upper()
+N_REPEATS = 30
+TEST_SIZE = 0.30
+RANDOM_SEED = 42
 
-###############################################################
-# Features
+PEPTIDE_FEATURES = PEP_COLS
+TCR_FEATURES = TCR_COLS
+PEPTIDE_TCR_FEATURES = PEPTIDE_FEATURES + TCR_FEATURES
+FULL_FEATURES = PEPTIDE_TCR_FEATURES + ["tcren_score"]
 
-aa_cols = [c for c in df.columns if c.startswith("frac_")]
 
-pep_cols = [
-    "length",
-    "hydrophobic_frac",
-    "polar_frac",
-    "positive_frac",
-    "negative_frac",
-    "aromatic_frac",
-    "small_frac",
-    "tiny_frac",
-    "proline_frac",
-    "glycine_frac",
-    "mw_est",
-] + aa_cols
-
-tcr_cols = [
-    "cdr3a_len",
-    "cdr3b_len",
-    "cdr3a_hydrophobic_frac",
-    "cdr3a_positive_frac",
-    "cdr3a_negative_frac",
-    "cdr3a_aromatic_frac",
-    "cdr3a_glycine_frac",
-    "cdr3a_proline_frac",
-    "cdr3b_hydrophobic_frac",
-    "cdr3b_positive_frac",
-    "cdr3b_negative_frac",
-    "cdr3b_aromatic_frac",
-    "cdr3b_glycine_frac",
-    "cdr3b_proline_frac",
-]
-
-missing = [c for c in pep_cols + tcr_cols if c not in df.columns]
-if missing:
-    raise ValueError(f"Missing feature columns: {missing}")
-
-pep_tcr_cols = pep_cols + tcr_cols
-full_cols = pep_cols + tcr_cols + ["tcren_score"]
-
-results = []
-
-###############################################################
-# Repeated grouped train/test split + model evaluation
-
-for i in range(n_repeats):
-    split_seed = R_S + i
-
-    splitter = GroupShuffleSplit(n_splits=1, test_size=Size, random_state=split_seed)
-    train_idx, test_idx = next(splitter.split(df, y=df["label"], groups=df["pdb_id"]))
-
-    train_df = df.iloc[train_idx].copy()
-    test_df = df.iloc[test_idx].copy()
-
-    overlap = set(train_df["pdb_id"]).intersection(set(test_df["pdb_id"]))
-    if overlap:
-        raise ValueError(f"Overlapping pdb_ids found: {sorted(overlap)}")
-
-    X_train_pep = train_df[pep_cols]
-    X_test_pep = test_df[pep_cols]
-
-    X_train_pep_tcr = train_df[pep_tcr_cols]
-    X_test_pep_tcr = test_df[pep_tcr_cols]
-
-    X_train_full = train_df[full_cols]
-    X_test_full = test_df[full_cols]
-
-    y_train = train_df["label"].values
-    y_test = test_df["label"].values
-
-    ###############################################################
-    # Models
-
-    logreg_pep = Pipeline([
-        ("scaler", StandardScaler()),
-        ("model", LogisticRegression(max_iter=2000, random_state=split_seed))
-    ])
-
-    rf_pep = RandomForestClassifier(
-        n_estimators=300,
-        random_state=split_seed,
-        class_weight="balanced"
+def make_logistic_regression(seed):
+    """Create the logistic-regression pipeline used in evaluation."""
+    return Pipeline(
+        [
+            ("scaler", StandardScaler()),
+            (
+                "model",
+                LogisticRegression(
+                    max_iter=2000,
+                    random_state=seed,
+                ),
+            ),
+        ]
     )
 
-    logreg_pep_tcr = Pipeline([
-        ("scaler", StandardScaler()),
-        ("model", LogisticRegression(max_iter=2000, random_state=split_seed))
-    ])
 
-    rf_pep_tcr = RandomForestClassifier(
+def make_random_forest(seed):
+    """Create the Random Forest used in evaluation."""
+    return RandomForestClassifier(
         n_estimators=300,
-        random_state=split_seed,
-        class_weight="balanced"
+        random_state=seed,
+        class_weight="balanced",
     )
 
-    logreg_full = Pipeline([
-        ("scaler", StandardScaler()),
-        ("model", LogisticRegression(max_iter=2000, random_state=split_seed))
-    ])
 
-    rf_full = RandomForestClassifier(
-        n_estimators=300,
-        random_state=split_seed,
-        class_weight="balanced"
-    )
+def ranking_metrics(test_df, score_column):
+    """Calculate ranks of the cognate peptide within each held-out TCR."""
+    ranks = []
 
-    logreg_pep.fit(X_train_pep, y_train)
-    rf_pep.fit(X_train_pep, y_train)
+    for pdb_id, group in test_df.groupby("pdb_id"):
+        ranked = (
+            group
+            .sort_values(score_column, ascending=False)
+            .reset_index(drop=True)
+        )
 
-    logreg_pep_tcr.fit(X_train_pep_tcr, y_train)
-    rf_pep_tcr.fit(X_train_pep_tcr, y_train)
+        positive_indices = np.where(
+            ranked["label"].values == 1
+        )[0]
 
-    logreg_full.fit(X_train_full, y_train)
-    rf_full.fit(X_train_full, y_train)
+        if len(positive_indices) != 1:
+            raise ValueError(
+                f"{pdb_id}: expected 1 positive, "
+                f"got {len(positive_indices)}"
+            )
 
-    ###############################################################
-    # Scores and metrics
+        ranks.append(int(positive_indices[0]) + 1)
 
-    test_df = test_df.copy()
-    test_df["score_tcren"] = -test_df["tcren_score"]
+    ranks = np.asarray(ranks)
 
-    test_df["score_logreg_pep"] = logreg_pep.predict_proba(X_test_pep)[:, 1]
-    test_df["score_rf_pep"] = rf_pep.predict_proba(X_test_pep)[:, 1]
-
-    test_df["score_logreg_pep_tcr"] = logreg_pep_tcr.predict_proba(X_test_pep_tcr)[:, 1]
-    test_df["score_rf_pep_tcr"] = rf_pep_tcr.predict_proba(X_test_pep_tcr)[:, 1]
-
-    test_df["score_logreg_full"] = logreg_full.predict_proba(X_test_full)[:, 1]
-    test_df["score_rf_full"] = rf_full.predict_proba(X_test_full)[:, 1]
-
-    score_cols = {
-        "tcren_baseline": "score_tcren",
-        "logreg_peptide": "score_logreg_pep",
-        "rf_peptide": "score_rf_pep",
-        "logreg_peptide_tcr": "score_logreg_pep_tcr",
-        "rf_peptide_tcr": "score_rf_pep_tcr",
-        "logreg_full": "score_logreg_full",
-        "rf_full": "score_rf_full",
+    return {
+        "mean_rank": ranks.mean(),
+        "median_rank": np.median(ranks),
+        "mrr": np.mean(1.0 / ranks),
+        "top1": np.mean(ranks == 1),
+        "top5": np.mean(ranks <= 5),
     }
 
-    for model_name, col in score_cols.items():
-        scores = test_df[col].values
-        preds = (scores >= 0.5).astype(int)
 
-        roc_auc = roc_auc_score(y_test, scores)
-        avg_precision = average_precision_score(y_test, scores)
-        accuracy = accuracy_score(y_test, preds)
+def main():
+    """Run repeated grouped evaluation and save detailed and summary results."""
+    df = pd.read_csv(DATA_CSV)
 
-        ranks = []
+    required_columns = (
+        ["pdb_id", "peptide", "label", "tcren_score"]
+        + PEPTIDE_FEATURES
+        + TCR_FEATURES
+    )
 
-        for pdb_id, group in test_df.groupby("pdb_id"):
-            group = group.sort_values(col, ascending=False).reset_index(drop=True)
-            pos_idx = np.where(group["label"].values == 1)[0]
+    missing = [
+        column
+        for column in required_columns
+        if column not in df.columns
+    ]
 
-            if len(pos_idx) != 1:
-                raise ValueError(f"{pdb_id}: expected 1 positive, got {len(pos_idx)}")
+    if missing:
+        raise ValueError(
+            f"Missing required columns: {missing}"
+        )
 
-            ranks.append(int(pos_idx[0]) + 1)
+    df["pdb_id"] = (
+        df["pdb_id"]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
 
-        ranks = np.array(ranks)
+    df["peptide"] = (
+        df["peptide"]
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
 
-        results.append({
-            "repeat": i,
-            "model": model_name,
-            "n_train_groups": train_df["pdb_id"].nunique(),
-            "n_test_groups": test_df["pdb_id"].nunique(),
-            "roc_auc": roc_auc,
-            "avg_precision": avg_precision,
-            "accuracy": accuracy,
-            "mean_rank": ranks.mean(),
-            "median_rank": np.median(ranks),
-            "mrr": np.mean(1.0 / ranks),
-            "top1": np.mean(ranks == 1),
-            "top5": np.mean(ranks <= 5),
-        })
+    results = []
 
-###############################################################
-# Save results
+    for repeat in range(N_REPEATS):
+        split_seed = RANDOM_SEED + repeat
 
-results_df = pd.DataFrame(results)
-results_df.to_csv(Results_CSV, index=False)
+        splitter = GroupShuffleSplit(
+            n_splits=1,
+            test_size=TEST_SIZE,
+            random_state=split_seed,
+        )
 
-metrics = ["roc_auc", "avg_precision", "accuracy", "mean_rank", "median_rank", "mrr", "top1", "top5"]
+        train_idx, test_idx = next(
+            splitter.split(
+                df,
+                y=df["label"],
+                groups=df["pdb_id"],
+            )
+        )
 
-summary_rows = []
+        train_df = df.iloc[train_idx].copy()
+        test_df = df.iloc[test_idx].copy()
 
-for model_name, g in results_df.groupby("model"):
-    row = {"model": model_name}
-    for metric in metrics:
-        row[f"{metric}_mean"] = g[metric].mean()
-        row[f"{metric}_std"] = g[metric].std()
-    summary_rows.append(row)
+        train_groups = set(train_df["pdb_id"])
+        test_groups = set(test_df["pdb_id"])
 
-summary_df = pd.DataFrame(summary_rows)
-summary_df.to_csv(Summary_CSV, index=False)
+        overlap = train_groups & test_groups
 
-#print(summary_df.sort_values("mrr_mean", ascending=False))
+        if overlap:
+            raise RuntimeError(
+                "TCR overlap detected between train and test: "
+                f"{sorted(overlap)}"
+            )
+
+        y_train = train_df["label"].values
+        y_test = test_df["label"].values
+
+        feature_sets = {
+            "peptide": PEPTIDE_FEATURES,
+            "peptide_tcr": PEPTIDE_TCR_FEATURES,
+            "full": FULL_FEATURES,
+        }
+
+        models = {}
+
+        for feature_name, columns in feature_sets.items():
+            logistic = make_logistic_regression(split_seed)
+            forest = make_random_forest(split_seed)
+
+            logistic.fit(
+                train_df[columns],
+                y_train,
+            )
+
+            forest.fit(
+                train_df[columns],
+                y_train,
+            )
+
+            models[f"logreg_{feature_name}"] = (
+                logistic,
+                columns,
+            )
+
+            models[f"rf_{feature_name}"] = (
+                forest,
+                columns,
+            )
+
+        scored = test_df.copy()
+
+        # Lower TCRen energy is better, so negate it for ranking.
+        scored["score_tcren_baseline"] = -scored["tcren_score"]
+
+        for model_name, (model, columns) in models.items():
+            scored[f"score_{model_name}"] = model.predict_proba(
+                scored[columns]
+            )[:, 1]
+
+        score_columns = {
+            "tcren_baseline": "score_tcren_baseline",
+            **{
+                model_name: f"score_{model_name}"
+                for model_name in models
+            },
+        }
+
+        for model_name, score_column in score_columns.items():
+            scores = scored[score_column].values
+
+            # Accuracy is retained as a supplementary classification metric.
+            predictions = (scores >= 0.5).astype(int)
+
+            row = {
+                "repeat": repeat,
+                "model": model_name,
+                "n_train_groups": train_df["pdb_id"].nunique(),
+                "n_test_groups": test_df["pdb_id"].nunique(),
+                "roc_auc": roc_auc_score(y_test, scores),
+                "avg_precision": average_precision_score(
+                    y_test,
+                    scores,
+                ),
+                "accuracy": accuracy_score(
+                    y_test,
+                    predictions,
+                ),
+            }
+
+            row.update(
+                ranking_metrics(
+                    scored,
+                    score_column,
+                )
+            )
+
+            results.append(row)
+
+    results_df = pd.DataFrame(results)
+
+    RESULTS_CSV.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    results_df.to_csv(
+        RESULTS_CSV,
+        index=False,
+    )
+
+    metrics = [
+        "roc_auc",
+        "avg_precision",
+        "accuracy",
+        "mean_rank",
+        "median_rank",
+        "mrr",
+        "top1",
+        "top5",
+    ]
+
+    summary_rows = []
+
+    for model_name, group in results_df.groupby("model"):
+        row = {"model": model_name}
+
+        for metric in metrics:
+            row[f"{metric}_mean"] = group[metric].mean()
+            row[f"{metric}_std"] = group[metric].std()
+
+        summary_rows.append(row)
+
+    summary_df = pd.DataFrame(summary_rows)
+
+    summary_df.to_csv(
+        SUMMARY_CSV,
+        index=False,
+    )
+
+    print(
+        summary_df
+        .sort_values("mrr_mean", ascending=False)
+        .to_string(index=False)
+    )
+
+    print(
+        f"\nSaved detailed results to: "
+        f"{RESULTS_CSV.resolve()}"
+    )
+
+    print(
+        f"Saved summary to: "
+        f"{SUMMARY_CSV.resolve()}"
+    )
+
+
+if __name__ == "__main__":
+    main()
