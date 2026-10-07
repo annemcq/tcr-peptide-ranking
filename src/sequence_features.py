@@ -1,10 +1,4 @@
-"""
-The following is an extraction from the original pipeline 
-(src/add_peptide_features.py, src/add_tcr_features.py), showing 
-feature-building functions refactored into reusable functions, 
-with the aim of applying them to brand-new peptide/TCR sequences at 
-inference time (not just for dataset-building).
-"""
+"""Reusable sequence-feature builders for peptide and TCR sequences."""
 
 AA = list("ACDEFGHIKLMNPQRSTVWY")
 
