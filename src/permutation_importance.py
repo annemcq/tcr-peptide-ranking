@@ -3,7 +3,6 @@
 from pathlib import Path
 
 import pandas as pd
-
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.inspection import permutation_importance
 from sklearn.metrics import average_precision_score
@@ -15,6 +14,7 @@ DATA_CSV = BASE / "processed" / "data_tcren_features_with_tcr.csv"
 
 RESULTS_DIR = BASE / "results"
 OUTPUT_CSV = RESULTS_DIR / "permutation_importance.csv"
+PERFORMANCE_OUTPUT_CSV = RESULTS_DIR / "permutation_importance_performance.csv"
 
 N_SPLITS = 30
 TEST_SIZE = 0.30
@@ -74,11 +74,7 @@ TCR_FEATURES = [
 ]
 
 
-FEATURE_COLS = (
-    PEPTIDE_FEATURES
-    + TCR_FEATURES
-    + ["tcren_score"]
-)
+FEATURE_COLS = PEPTIDE_FEATURES + TCR_FEATURES + ["tcren_score"]
 
 
 def main():
@@ -87,17 +83,10 @@ def main():
     df = pd.read_csv(DATA_CSV)
 
     required_cols = FEATURE_COLS + ["label", "pdb_id"]
-
-    missing = [
-        col
-        for col in required_cols
-        if col not in df.columns
-    ]
+    missing = [col for col in required_cols if col not in df.columns]
 
     if missing:
-        raise ValueError(
-            f"Missing required columns: {missing}"
-        )
+        raise ValueError(f"Missing required columns: {missing}")
 
     X = df[FEATURE_COLS]
     y = df["label"]
@@ -106,7 +95,9 @@ def main():
     all_importances = []
     split_performance = []
 
-    for split_seed in range(N_SPLITS):
+    for i in range(N_SPLITS):
+        split_seed = RANDOM_SEED + i
+
         splitter = GroupShuffleSplit(
             n_splits=1,
             test_size=TEST_SIZE,
@@ -132,9 +123,9 @@ def main():
             )
 
         model = RandomForestClassifier(
-            n_estimators=500,
+            n_estimators=300,
             class_weight="balanced",
-            random_state=RANDOM_SEED,
+            random_state=split_seed,
             n_jobs=-1,
         )
 
@@ -149,7 +140,8 @@ def main():
 
         split_performance.append(
             {
-                "split": split_seed,
+                "split": i,
+                "seed": split_seed,
                 "average_precision": ap,
             }
         )
@@ -160,7 +152,7 @@ def main():
             y_test,
             scoring="average_precision",
             n_repeats=20,
-            random_state=RANDOM_SEED,
+            random_state=split_seed,
             n_jobs=-1,
         )
 
@@ -170,35 +162,30 @@ def main():
         ):
             all_importances.append(
                 {
-                    "split": split_seed,
+                    "split": i,
+                    "seed": split_seed,
                     "feature": feature,
                     "importance": importance,
                 }
             )
 
         print(
-            f"Split {split_seed + 1:02d}/{N_SPLITS} "
+            f"Split {i + 1:02d}/{N_SPLITS} "
+            f"(seed {split_seed}) "
             f"- held-out AP: {ap:.3f}"
         )
 
-    importance_df = pd.DataFrame(
-        all_importances
-    )
+    importance_df = pd.DataFrame(all_importances)
 
     summary = (
         importance_df
         .groupby("feature")["importance"]
         .agg(["mean", "std"])
         .reset_index()
-        .sort_values(
-            "mean",
-            ascending=False,
-        )
+        .sort_values("mean", ascending=False)
     )
 
-    performance_df = pd.DataFrame(
-        split_performance
-    )
+    performance_df = pd.DataFrame(split_performance)
 
     RESULTS_DIR.mkdir(
         parents=True,
@@ -210,13 +197,8 @@ def main():
         index=False,
     )
 
-    performance_output = (
-        RESULTS_DIR
-        / "permutation_importance_performance.csv"
-    )
-
     performance_df.to_csv(
-        performance_output,
+        PERFORMANCE_OUTPUT_CSV,
         index=False,
     )
 
@@ -232,9 +214,7 @@ def main():
 
     print("\nPermutation importance:")
     print(
-        summary.to_string(
-            index=False
-        )
+        summary.to_string(index=False)
     )
 
     print(
@@ -244,7 +224,7 @@ def main():
 
     print(
         f"Saved split performance to: "
-        f"{performance_output.resolve()}"
+        f"{PERFORMANCE_OUTPUT_CSV.resolve()}"
     )
 
 
