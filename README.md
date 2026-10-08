@@ -40,7 +40,7 @@ To reduce dependence on one particular split, I repeated the evaluation across *
 
 ## Evaluation
 
-Since the main task is ranking candidate peptides for each TCR, I focused on ranking metrics as well as standard classification metrics:
+Since the main task is ranking candidate peptides for each TCR, I focused on ranking and threshold-free classification metrics. I do not report thresholded classification accuracy: the TCRen baseline is a negated energy used for ordering, not a calibrated probability, so applying a 0.5 classification threshold would be arbitrary:
 
 - Mean Reciprocal Rank (MRR)
 - Top-1 accuracy
@@ -190,6 +190,7 @@ Run the feature-importance analyses:
 ```bash
 python src/feature_importance.py
 python src/permutation_importance.py
+python src/build_matched_dataset.py
 python src/prepare_matched_dataset.py
 python src/run_evaluation.py --data processed/data_tcren_features_matched_composition.csv --results results/matched_composition_eval.csv --summary results/matched_composition_summary.csv
 ```
