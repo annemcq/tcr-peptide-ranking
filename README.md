@@ -55,11 +55,12 @@ Since the main task is ranking candidate peptides for each TCR, I focused on ran
 | TCRen baseline | 0.33 ± 0.08 | 0.15 ± 0.10 | 0.49 ± 0.14 | 0.22 ± 0.11 | 0.91 ± 0.03 |
 | LogReg peptide | 0.30 ± 0.10 | 0.16 ± 0.11 | 0.47 ± 0.16 | 0.17 ± 0.08 | 0.88 ± 0.05 |
 | RF peptide | 0.51 ± 0.17 | 0.38 ± 0.17 | 0.67 ± 0.23 | 0.35 ± 0.12 | 0.90 ± 0.07 |
-| RF peptide + TCR | 0.65 ± 0.16 | 0.54 ± 0.20 | 0.78 ± 0.16 | 0.51 ± 0.15 | 0.92 ± 0.06 |
-| LogReg full | 0.53 ± 0.13 | 0.41 ± 0.15 | 0.69 ± 0.15 | 0.43 ± 0.13 | **0.94 ± 0.03** |
-| **RF full** | **0.65 ± 0.16** | **0.54 ± 0.20** | **0.78 ± 0.16** | **0.51 ± 0.15** | 0.92 ± 0.06 |
+| LogReg peptide + TCR | 0.53 ± 0.13 | 0.41 ± 0.15 | 0.69 ± 0.15 | 0.43 ± 0.13 | **0.94 ± 0.03** |
+| RF peptide + TCR | **0.65 ± 0.16** | **0.54 ± 0.20** | **0.78 ± 0.16** | **0.51 ± 0.15** | 0.92 ± 0.06 |
+| LogReg full | 0.53 ± 0.13 | 0.41 ± 0.15 | 0.69 ± 0.15 | 0.43 ± 0.13 | 0.94 ± 0.03 |
+| RF full | 0.65 ± 0.16 | 0.54 ± 0.20 | 0.78 ± 0.16 | 0.51 ± 0.15 | 0.92 ± 0.06 |
 
-The full Random Forest and hybrid models produced the strongest mean ranking performance, while the full Logistic Regression achieved the highest mean ROC-AUC. In paired comparisons of MRR across the 30 repeated splits, the full Random Forest significantly outperformed TCRen and the peptide-only and peptide+TCR models after Holm–Bonferroni correction. Its advantage over the full Logistic Regression was not statistically significant.
+The hybrid and full Random Forest models produced the strongest mean ranking performance, while the full Logistic Regression achieved the highest mean ROC-AUC. In paired comparisons of MRR across the 30 repeated splits, the strongest RF model significantly outperformed TCRen and the peptide-only and peptide+TCR models after Holm–Bonferroni correction. Its advantage over the corresponding full Logistic Regression was not statistically significant.
 
 These repeated splits reuse the same 25 TCR systems, so the split-level observations are not independent replicates. The paired tests should therefore be interpreted as comparisons across repeated resamples rather than as 30 independent biological experiments. A stronger follow-up would be a per-system analysis such as leave-one-system-out evaluation.
 
