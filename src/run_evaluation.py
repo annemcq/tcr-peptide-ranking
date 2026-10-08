@@ -1,6 +1,7 @@
 """Evaluate TCR-peptide ranking models across repeated grouped splits."""
 
 from pathlib import Path
+import argparse
 import sys
 
 import numpy as np
@@ -102,7 +103,34 @@ def ranking_metrics(test_df, score_column):
 
 def main():
     """Run repeated grouped evaluation and save detailed and summary results."""
-    df = pd.read_csv(DATA_CSV)
+    parser = argparse.ArgumentParser(
+        description="Evaluate TCR-peptide ranking models across repeated grouped splits."
+    )
+    parser.add_argument(
+        "--data",
+        type=Path,
+        default=DATA_CSV,
+        help="Input feature CSV.",
+    )
+    parser.add_argument(
+        "--results",
+        type=Path,
+        default=RESULTS_CSV,
+        help="Detailed results CSV.",
+    )
+    parser.add_argument(
+        "--summary",
+        type=Path,
+        default=SUMMARY_CSV,
+        help="Summary results CSV.",
+    )
+    args = parser.parse_args()
+
+    data_csv = args.data if args.data.is_absolute() else BASE / args.data
+    results_csv = args.results if args.results.is_absolute() else BASE / args.results
+    summary_csv = args.summary if args.summary.is_absolute() else BASE / args.summary
+
+    df = pd.read_csv(data_csv)
 
     required_columns = (
         ["pdb_id", "peptide", "label", "tcren_score"]
@@ -254,13 +282,13 @@ def main():
 
     results_df = pd.DataFrame(results)
 
-    RESULTS_CSV.parent.mkdir(
+    results_csv.parent.mkdir(
         parents=True,
         exist_ok=True,
     )
 
     results_df.to_csv(
-        RESULTS_CSV,
+        results_csv,
         index=False,
     )
 
@@ -289,7 +317,7 @@ def main():
     summary_df = pd.DataFrame(summary_rows)
 
     summary_df.to_csv(
-        SUMMARY_CSV,
+        summary_csv,
         index=False,
     )
 
@@ -301,12 +329,12 @@ def main():
 
     print(
         f"\nSaved detailed results to: "
-        f"{RESULTS_CSV.resolve()}"
+        f"{results_csv.resolve()}"
     )
 
     print(
         f"Saved summary to: "
-        f"{SUMMARY_CSV.resolve()}"
+        f"{summary_csv.resolve()}"
     )
 
 
