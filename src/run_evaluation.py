@@ -72,14 +72,14 @@ def ranking_metrics(test_df, score_column):
     ranks = []
 
     for pdb_id, group in test_df.groupby("pdb_id"):
-        ranked = (
-            group
-            .sort_values(score_column, ascending=False)
-            .reset_index(drop=True)
-        )
+        # Use average ranks for ties rather than relying on row order.
+        # This matters for the composition-matched control, where some
+        # feature sets are identical for every candidate within a TCR.
+        scores = group[score_column]
+        group_ranks = scores.rank(method="average", ascending=False)
 
         positive_indices = np.where(
-            ranked["label"].values == 1
+            group["label"].values == 1
         )[0]
 
         if len(positive_indices) != 1:
@@ -88,7 +88,7 @@ def ranking_metrics(test_df, score_column):
                 f"got {len(positive_indices)}"
             )
 
-        ranks.append(int(positive_indices[0]) + 1)
+        ranks.append(float(group_ranks.iloc[positive_indices[0]]))
 
     ranks = np.asarray(ranks)
 
