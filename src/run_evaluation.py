@@ -9,7 +9,6 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
-    accuracy_score,
     average_precision_score,
     roc_auc_score,
 )
@@ -252,9 +251,6 @@ def main():
         for model_name, score_column in score_columns.items():
             scores = scored[score_column].values
 
-            # Accuracy is retained as a supplementary classification metric.
-            predictions = (scores >= 0.5).astype(int)
-
             row = {
                 "repeat": repeat,
                 "model": model_name,
@@ -264,10 +260,6 @@ def main():
                 "avg_precision": average_precision_score(
                     y_test,
                     scores,
-                ),
-                "accuracy": accuracy_score(
-                    y_test,
-                    predictions,
                 ),
             }
 
@@ -295,7 +287,6 @@ def main():
     metrics = [
         "roc_auc",
         "avg_precision",
-        "accuracy",
         "mean_rank",
         "median_rank",
         "mrr",
