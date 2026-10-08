@@ -92,6 +92,8 @@ This makes the negative-sampling issue harder to dismiss as a feature-importance
 
 ### Composition-matched negative control
 
+The main evaluation shows strong performance for the full models, but the composition-matched control removes the simple peptide-composition shortcut. Under this control, TCRen and full Logistic Regression retain the same ranking performance, while the Random Forest becomes substantially worse; the peptide-only and peptide+TCR models collapse to chance-level ranking because their scores are tied within each TCR.
+
 I then tested this directly by regenerating the 100 negatives for each TCR as random permutations of its cognate peptide. These negatives have exactly the same amino-acid composition and length as the positive peptide, removing the simple composition shortcut while keeping the rest of the evaluation design unchanged.
 
 I reran the same 30 grouped train/test splits and the same models on this matched dataset:
@@ -104,7 +106,9 @@ I reran the same 30 grouped train/test splits and the same models on this matche
 | LogReg full | 0.28 ± 0.08 | 0.13 ± 0.08 | 0.48 ± 0.13 | 0.10 ± 0.05 | 0.82 ± 0.06 |
 | RF full | 0.13 ± 0.07 | 0.03 ± 0.06 | 0.19 ± 0.13 | 0.04 ± 0.02 | 0.71 ± 0.09 |
 | LogReg peptide | 0.02 ± 0.00 | 0.00 ± 0.00 | 0.00 ± 0.00 | 0.01 ± 0.00 | 0.50 ± 0.00 |
+| LogReg peptide + TCR | 0.02 ± 0.00 | 0.00 ± 0.00 | 0.00 ± 0.00 | 0.01 ± 0.00 | 0.50 ± 0.00 |
 | RF peptide | 0.02 ± 0.00 | 0.00 ± 0.00 | 0.00 ± 0.00 | 0.01 ± 0.00 | 0.50 ± 0.00 |
+| RF peptide + TCR | 0.02 ± 0.00 | 0.00 ± 0.00 | 0.00 ± 0.00 | 0.01 ± 0.00 | 0.50 ± 0.00 |
 
 The peptide-only ROC-AUC results collapse to chance under composition matching. Their ranking metrics also become uninformative: because all candidates within a TCR receive tied scores, the positive is assigned the average rank of 51 out of 101 candidates, giving MRR ≈ 0.02 and Top-1/Top-5 = 0. The earlier MRR/Top-1 values of 1.00 were artifacts of arbitrary row ordering under ties.
 
