@@ -48,19 +48,20 @@ Since the main task is ranking candidate peptides for each TCR, I focused on ran
 
 ### Results
 
+**Values are mean ± standard deviation over 30 grouped train/test splits.**
+
 | Model | MRR | Top-1 | Top-5 | Avg. Precision | ROC-AUC |
 |---|---:|---:|---:|---:|---:|
-| TCRen baseline | 0.33 | 0.15 | 0.49 | 0.22 | 0.91 |
-| LogReg peptide | 0.30 | 0.16 | 0.47 | 0.17 | 0.88 |
-| LogReg peptide + TCR | 0.30 | 0.16 | 0.46 | 0.15 | 0.87 |
-| RF peptide + TCR | 0.49 | 0.37 | 0.65 | 0.35 | 0.87 |
-| RF peptide | 0.51 | 0.39 | 0.67 | 0.36 | 0.89 |
-| LogReg full | 0.56 | 0.45 | 0.70 | 0.37 | **0.94** |
-| **RF full** | **0.62** | **0.50** | **0.75** | **0.49** | 0.93 |
+| TCRen baseline | 0.33 ± 0.08 | 0.15 ± 0.10 | 0.49 ± 0.14 | 0.22 ± 0.11 | 0.91 ± 0.03 |
+| LogReg peptide | 0.30 ± 0.10 | 0.16 ± 0.11 | 0.47 ± 0.16 | 0.17 ± 0.08 | 0.88 ± 0.05 |
+| RF peptide | 0.51 ± 0.17 | 0.38 ± 0.17 | 0.67 ± 0.23 | 0.35 ± 0.12 | 0.90 ± 0.07 |
+| RF peptide + TCR | 0.65 ± 0.16 | 0.54 ± 0.20 | 0.78 ± 0.16 | 0.51 ± 0.15 | 0.92 ± 0.06 |
+| LogReg full | 0.53 ± 0.13 | 0.41 ± 0.15 | 0.69 ± 0.15 | 0.43 ± 0.13 | **0.94 ± 0.03** |
+| **RF full** | **0.65 ± 0.16** | **0.54 ± 0.20** | **0.78 ± 0.16** | **0.51 ± 0.15** | 0.92 ± 0.06 |
 
-The full Random Forest produced the strongest mean ranking performance overall, while the full Logistic Regression achieved the highest mean ROC-AUC.
+The full Random Forest and hybrid models produced the strongest mean ranking performance, while the full Logistic Regression achieved the highest mean ROC-AUC. In paired comparisons of MRR across the 30 repeated splits, the full Random Forest significantly outperformed TCRen and the peptide-only and peptide+TCR models after Holm–Bonferroni correction. Its advantage over the full Logistic Regression was not statistically significant.
 
-In paired comparisons of MRR across the 30 repeated splits, the full Random Forest significantly outperformed TCRen and the peptide-only and peptide+TCR models after Holm–Bonferroni correction. Its advantage over the full Logistic Regression was not statistically significant.
+These repeated splits reuse the same 25 TCR systems, so the split-level observations are not independent replicates. The paired tests should therefore be interpreted as comparisons across repeated resamples rather than as 30 independent biological experiments. A stronger follow-up would be a per-system analysis such as leave-one-system-out evaluation.
 
 ## Looking at what the model learned
 
@@ -92,15 +93,19 @@ I then tested this directly by regenerating the 100 negatives for each TCR as ra
 
 I reran the same 30 grouped train/test splits and the same models on this matched dataset:
 
+**Values are mean ± standard deviation over 30 grouped train/test splits.**
+
 | Model | MRR | Top-1 | Top-5 | Avg. Precision | ROC-AUC |
 |---|---:|---:|---:|---:|---:|
-| TCRen baseline | 0.28 | 0.13 | 0.48 | 0.13 | 0.82 |
-| LogReg full | 0.28 | 0.13 | 0.48 | 0.10 | 0.82 |
-| RF full | 0.17 | 0.08 | 0.23 | 0.04 | 0.71 |
-| LogReg peptide | 1.00 | 1.00 | 1.00 | 0.01 | 0.50 |
-| RF peptide | 1.00 | 1.00 | 1.00 | 0.01 | 0.50 |
+| TCRen baseline | 0.28 ± 0.08 | 0.13 ± 0.08 | 0.48 ± 0.13 | 0.13 ± 0.06 | 0.82 ± 0.05 |
+| LogReg full | 0.28 ± 0.08 | 0.13 ± 0.08 | 0.48 ± 0.13 | 0.10 ± 0.05 | 0.82 ± 0.06 |
+| RF full | 0.13 ± 0.07 | 0.03 ± 0.06 | 0.19 ± 0.13 | 0.04 ± 0.02 | 0.71 ± 0.09 |
+| LogReg peptide | 0.02 ± 0.00 | 0.00 ± 0.00 | 0.00 ± 0.00 | 0.01 ± 0.00 | 0.50 ± 0.00 |
+| RF peptide | 0.02 ± 0.00 | 0.00 ± 0.00 | 0.00 ± 0.00 | 0.01 ± 0.00 | 0.50 ± 0.00 |
 
-The peptide-only ROC-AUC results collapse to chance under composition matching, showing that the original peptide-sequence signal was strongly dependent on differences in amino-acid composition between cognate and artificially generated negatives. TCRen retains meaningful discrimination, while the full models retain some ROC-AUC but no longer improve the ranking metrics over the TCRen baseline.
+The peptide-only ROC-AUC results collapse to chance under composition matching. Their ranking metrics also become uninformative: because all candidates within a TCR receive tied scores, the positive is assigned the average rank of 51 out of 101 candidates, giving MRR ≈ 0.02 and Top-1/Top-5 = 0. The earlier MRR/Top-1 values of 1.00 were artifacts of arbitrary row ordering under ties.
+
+The full Logistic Regression exactly matches TCRen on the ranking metrics because the peptide features are constant within each TCR in this matched control, so they cannot change the within-TCR ordering. The Random Forest performs worse than TCRen alone (MRR 0.13 vs 0.28), despite retaining some ROC-AUC signal.
 
 I therefore interpret the original ML performance as partly driven by the negative-sampling design rather than as evidence that these simple sequence features independently capture TCR specificity. The matched-negative experiment makes that limitation explicit rather than leaving it as a hypothetical concern.
 
@@ -118,7 +123,7 @@ The true cognate peptide ranked:
 
 **1st out of 101 candidates**
 
-I treat this as an illustrative example rather than evidence of generalisation, since it represents only one held-out TCR system.
+This is an illustrative example rather than evidence of generalisation, since it represents only one held-out TCR system. Given the composition-matched control, this particular #1 rank should also be interpreted cautiously because the original negative set allowed composition-driven discrimination.
 
 ## Limitations and what I would try next
 
