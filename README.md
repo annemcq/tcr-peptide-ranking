@@ -86,6 +86,24 @@ TCRen was clearly the most important individual feature. However, cysteine and h
 
 This makes the negative-sampling issue harder to dismiss as a feature-importance artifact. At least part of the model's sequence signal is likely coming from the difference between natural cognate peptides and uniformly generated negatives.
 
+### Composition-matched negative control
+
+I then tested this directly by regenerating the 100 negatives for each TCR as random permutations of its cognate peptide. These negatives have exactly the same amino-acid composition and length as the positive peptide, removing the simple composition shortcut while keeping the rest of the evaluation design unchanged.
+
+I reran the same 30 grouped train/test splits and the same models on this matched dataset:
+
+| Model | MRR | Top-1 | Top-5 | Avg. Precision | ROC-AUC |
+|---|---:|---:|---:|---:|---:|
+| TCRen baseline | 0.28 | 0.13 | 0.48 | 0.13 | 0.82 |
+| LogReg full | 0.28 | 0.13 | 0.48 | 0.10 | 0.82 |
+| RF full | 0.17 | 0.08 | 0.23 | 0.04 | 0.71 |
+| LogReg peptide | 1.00 | 1.00 | 1.00 | 0.01 | 0.50 |
+| RF peptide | 1.00 | 1.00 | 1.00 | 0.01 | 0.50 |
+
+The peptide-only ROC-AUC results collapse to chance under composition matching, showing that the original peptide-sequence signal was strongly dependent on differences in amino-acid composition between cognate and artificially generated negatives. TCRen retains meaningful discrimination, while the full models retain some ROC-AUC but no longer improve the ranking metrics over the TCRen baseline.
+
+I therefore interpret the original ML performance as partly driven by the negative-sampling design rather than as evidence that these simple sequence features independently capture TCR specificity. The matched-negative experiment makes that limitation explicit rather than leaving it as a hypothetical concern.
+
 The simple CDR3 summary features, by contrast, had relatively small permutation importances. I would not interpret this as evidence that TCR sequence is unimportant; it suggests that these particular hand-engineered representations add limited information in this experiment.
 
 For that reason, I would not interpret the reported performance as evidence that these sequence features alone can predict biological TCR specificity at this level. A model can achieve good evaluation metrics while exploiting a shortcut introduced during dataset construction.
@@ -104,9 +122,9 @@ I treat this as an illustrative example rather than evidence of generalisation, 
 
 ## Limitations and what I would try next
 
-The main limitation I would address is the negative sampling strategy.
+The main limitation is the negative sampling strategy. The composition-matched control shows that uniformly generated negatives introduce a substantial composition shortcut.
 
-Instead of uniformly generated sequences, I would use biologically plausible negatives sampled from real protein sequences, ideally controlling for peptide length and MHC context. I would then repeat the evaluation and feature-importance analysis to see how much of the current ranking performance remains once the composition shortcut is removed.
+A stronger next step would be to use biologically plausible negatives sampled from real protein sequences, ideally controlling for peptide length and MHC context. I would then repeat the evaluation and feature-importance analysis on that independent negative set.
 
 Other useful extensions would be:
 
@@ -160,6 +178,8 @@ Run the feature-importance analyses:
 ```bash
 python src/feature_importance.py
 python src/permutation_importance.py
+python src/prepare_matched_dataset.py
+python src/run_evaluation.py --data processed/data_tcren_features_matched_composition.csv --results results/matched_composition_eval.csv --summary results/matched_composition_summary.csv
 ```
 
 Run the tests:
