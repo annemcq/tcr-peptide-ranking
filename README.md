@@ -1,5 +1,7 @@
 # TCR–Peptide Ranking with Sequence Features and TCRen
 
+[![Tests](https://github.com/annemcq/tcr-peptide-ranking/actions/workflows/tests.yml/badge.svg)](https://github.com/annemcq/tcr-peptide-ranking/actions/workflows/tests.yml)
+
 Can relatively simple sequence features help rank candidate peptides for a T cell receptor?
 
 I built this project after reading the TCRen work by Karnaukhov et al. (2024). TCRen uses a structure-based statistical potential to score TCR–peptide pairs, and I wanted to explore whether combining that signal with features derived directly from peptide and TCR sequences could improve peptide ranking.
