@@ -43,5 +43,7 @@ jobs:
             echo "Results unchanged."
           else
             git commit -m "Record ten-draw matched-negative robustness evaluation"
+            git fetch origin main
+            git rebase origin/main
             git push origin HEAD:main
           fi
