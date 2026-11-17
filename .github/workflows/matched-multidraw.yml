@@ -1,0 +1,47 @@
+name: Matched negative draw robustness
+
+on:
+  push:
+    paths:
+      - "src/evaluate_matched_multidraw.py"
+      - "tests/test_matched_multidraw.py"
+      - ".github/workflows/matched-multidraw.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install scientific dependencies
+        run: python -m pip install numpy pandas scikit-learn pytest
+      - name: Test multi-draw evaluation
+        run: python -m pytest -q tests/test_matched_multidraw.py
+      - name: Run ten independent matched-negative draws
+        run: python src/evaluate_matched_multidraw.py --draws 10 --splits 30 --rf-trees 300
+      - name: Upload reproducibility reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: matched-multidraw-results
+          path: |
+            results/matched_multidraw_splits.csv
+            results/matched_multidraw_draw_means.csv
+            results/matched_multidraw_summary.csv
+      - name: Commit evaluated reports
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add results/matched_multidraw_splits.csv results/matched_multidraw_draw_means.csv results/matched_multidraw_summary.csv
+          if git diff --cached --quiet; then
+            echo "Results unchanged."
+          else
+            git commit -m "Record ten-draw matched-negative robustness evaluation"
+            git push origin HEAD:main
+          fi
