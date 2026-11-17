@@ -4,6 +4,7 @@ from pathlib import Path
 import random
 from collections import Counter
 import math
+import zlib
 
 import pandas as pd
 
@@ -77,7 +78,7 @@ def main():
         negatives = generate_matched_negatives(
             positive_peptide,
             n_neg=N_NEG,
-            seed=RANDOM_SEED + hash(pdb_id) % 100000,
+            seed=RANDOM_SEED + zlib.crc32(pdb_id.encode("utf-8")) % 100000,  # stable across runs (built-in hash() is randomized)
         )
 
         for peptide in negatives:
