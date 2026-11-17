@@ -120,7 +120,17 @@ Matched-control note: `src/build_matched_dataset.py` now seeds each TCR with a s
 
 The matched-control table above uses 30 grouped splits of **one** composition-matched negative draw. Repeating train/test splits does not quantify variability from the selection of shuffled negatives. To test that second source of variation, [`src/evaluate_matched_multidraw.py`](src/evaluate_matched_multidraw.py) regenerates 100 unique composition-matched negatives per TCR for each of **10 deterministic draws**, then evaluates the TCRen baseline, full Logistic Regression, and full Random Forest over the **same 30 grouped split seeds** within each draw. Its summary is the **mean ± sample SD across the ten draw-level means**, not across the 300 correlated split-level results. The 25 source TCRs are reused in every draw; these are not independent biological samples.
 
-Run with `python src/evaluate_matched_multidraw.py --draws 10 --splits 30 --rf-trees 300`. The companion GitHub Actions workflow [Matched negative draw robustness](.github/workflows/matched-multidraw.yml) executes the experiment and publishes split-level, draw-level, and across-draw CSV reports once completed. The existing matched-control table remains the historical single-draw analysis; new multi-draw statistics should only replace its interpretation after verification.
+The ten-draw robustness experiment was executed in GitHub Actions (Python 3.11, 300-tree Random Forest, 30 grouped splits per draw). Mean ± sample SD **across draw-level mean metrics**:
+
+| Model | MRR | Top-1 | Top-5 | ROC-AUC |
+|---|---:|---:|---:|---:|
+| TCRen baseline | 0.344 ± 0.034 | 0.209 ± 0.040 | 0.478 ± 0.029 | 0.820 ± 0.004 |
+| Full Logistic Regression | 0.344 ± 0.033 | 0.209 ± 0.040 | 0.478 ± 0.029 | 0.813 ± 0.006 |
+| Full Random Forest | 0.177 ± 0.033 | 0.055 ± 0.033 | 0.272 ± 0.047 | 0.755 ± 0.010 |
+
+The full Random Forest had lower MRR than the TCRen baseline in **all ten draws**, while full Logistic Regression closely tracked TCRen. This reinforces the evidence that the apparent benefits of the original sequence features are sensitive to the negative-peptide construction. The 30 split means within each draw reuse the same 25 TCRs, and variation across ten negative draws does not provide ten independent biological replicates.
+
+Reproduce with `python src/evaluate_matched_multidraw.py --draws 10 --splits 30 --rf-trees 300`. The [GitHub Actions workflow](.github/workflows/matched-multidraw.yml) saves split-level, draw-level and across-draw results as [CSV reports](results/matched_multidraw_summary.csv). The single-draw table above is retained as the historical evaluation of the original committed matched dataset; the ten-draw study is the more robust estimate of negative-draw sensitivity.
 
 I therefore read the original ML performance as partly driven by the negative-sampling design, not as evidence that these simple sequence features capture TCR specificity. A model can score well while exploiting a shortcut introduced during dataset construction, and the matched-negative experiment shows that this happened here.
 
