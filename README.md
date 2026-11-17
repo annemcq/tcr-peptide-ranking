@@ -112,6 +112,10 @@ The peptide-only ROC-AUC results collapse to chance under composition matching. 
 
 The full Logistic Regression exactly matches TCRen on the ranking metrics because the peptide features are constant within each TCR in this matched control, so they cannot change the within-TCR ordering. The Random Forest performs worse than TCRen alone (MRR 0.13 vs 0.28), despite retaining some ROC-AUC signal.
 
+The committed matched dataset is one random draw of permutations, and the TCRen baseline depends on that draw. Rebuilding the negatives with ten other seeds gave a full-dataset TCRen MRR between 0.25 and 0.37 (mean 0.31), against 0.33 for the original negatives, so the drop from 0.33 to 0.28 above is within draw-to-draw variation and I do not read it as an effect of composition matching. The peptide-only collapse follows from tied scores and holds for any draw. The Random Forest's deficit relative to TCRen also held in the one other full evaluation I ran (MRR 0.18 vs 0.33).
+
+Matched-control note: `src/build_matched_dataset.py` now seeds each TCR with a stable hash, so rebuilding is reproducible, but it produces a different draw from the committed `processed/matched_composition_pairs.csv`, which was generated earlier with Python's randomized `hash()`. The committed file is the reference for the matched-control numbers above.
+
 I therefore read the original ML performance as partly driven by the negative-sampling design, not as evidence that these simple sequence features capture TCR specificity. A model can score well while exploiting a shortcut introduced during dataset construction, and the matched-negative experiment shows that this happened here.
 
 The simple CDR3 summary features, by contrast, had relatively small permutation importances. I would not interpret this as evidence that TCR sequence is unimportant; it suggests that these particular hand-engineered representations add limited information in this experiment.
